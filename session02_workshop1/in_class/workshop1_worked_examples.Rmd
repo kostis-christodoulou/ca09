@@ -46,19 +46,6 @@ library(ggthemes) # theme_economist, theme_fivethirtyeight, etc
 library(knitr) 
 library(kableExtra) # for nicer table formatting
 library(zoo) # to calculate 7-day moving averages
-library(gapminder)
-
-
-# Some fancy formatting, ggplot themes with opinionated defaults and an emphasis on typography
-# https://cran.r-project.org/web/packages/hrbrthemes/vignettes/why_hrbrthemes.html
-library(hrbrthemes)
-
-# to use hrbrthemes you have to install/load some google fonts, https://fonts.google.com/
-# To import Roboto Condensed font, use
-hrbrthemes::import_roboto_condensed()
-
-# If you have used skyfonts to donwload all google fonts, use 
-extrafont::loadfonts()
 
 ```
 
@@ -73,9 +60,8 @@ The first step is to import the data into R. We will use either `readr::read_csv
 
 ```{r bike-weather, echo = TRUE}
 bike_weather <- vroom(here::here("data","london_bikes.csv")) %>% 
-  janitor::clean_names() %>% 
-  mutate(month = lubridate::month(day, label = TRUE),
-         weekday = lubridate::wday(day, label=TRUE)
+  mutate(month = lubridate::month(date, label = TRUE),
+         weekday = lubridate::wday(date, label=TRUE)
   )
 ```
 
@@ -99,14 +85,14 @@ Try this for yourself. Map the column `day` onto the x axis and the column `temp
 
 
 ```{r ggplot_geom_line}
-ggplot(bike_weather, aes(x = day, y = temp)) +
+ggplot(bike_weather, aes(x = date, y = mean_temp)) +
   geom_line()
 ```
 Try again, using  `geom_point()` instead of `geom_line()`.
 
 
 ```{r ggplot_geom_point}
-ggplot(bike_weather, aes(x = day, y = temp)) +
+ggplot(bike_weather, aes(x = date, y = mean_temp)) +
   geom_point()
 ```
 
@@ -114,7 +100,7 @@ And now swap which column you map to x and which to y.
 
 
 ```{r ggplot_geom_point_flipped}
-ggplot(bike_weather, aes(x = temp, y = day)) +
+ggplot(bike_weather, aes(x = mean_temp, y = date)) +
   geom_point()
 ```
 
@@ -124,7 +110,7 @@ You can use other geoms to make different types of plots. For example, `geom_his
 
 
 ```{r ggplot_geom_histogram}
-ggplot(bike_weather, aes(x = temp)) +
+ggplot(bike_weather, aes(x = mean_temp)) +
   geom_histogram()
 ```
 
@@ -134,7 +120,7 @@ For boxplots, we frequently want categorical data on the x or y axis. For exampl
 
 
 ```{r ggplot_geom_boxplot1}
-ggplot(bike_weather, aes(x = month, y = temp)) +
+ggplot(bike_weather, aes(x = month, y = mean_temp)) +
   geom_boxplot()
 ```
 
@@ -144,7 +130,7 @@ ggplot(bike_weather, aes(x = month, y = temp)) +
 Make a scatter plot of `temp` against `day`, using the `colour` aesthetic to colour points by month. 
 
 ```{r ggplot_geom_point_colour}
-ggplot(bike_weather, aes(x = day, y = temp, colour=month)) +
+ggplot(bike_weather, aes(x = date, y = mean_temp, colour=month)) +
   geom_point()
 ```
 
@@ -154,7 +140,7 @@ Some geoms use a `fill` aesthetic, which is similar to `colour` but applies to s
 
 
 ```{r ggplot_geom_boxplot2}
-ggplot(bike_weather, aes(x = month, y = temp, colour=month)) +
+ggplot(bike_weather, aes(x = month, y = mean_temp, fill=month)) +
   geom_boxplot()
 ```
 
@@ -201,7 +187,7 @@ ggplot(movies, aes(x = gross, y = title)) +
 ```
 
 
-Now these is not very useful graphs, as we have close to 3000 movies. So let us simply choose the top 20 movies using `dplyr::slice_max()` and then suing the pipe operator`%>%` , feed it into a ggplot.
+Now these is not very useful graphs, as we have close to 3000 movies. So let us simply choose the top 20 movies using `dplyr::slice_max()` and then using the pipe operator`%>%` , feed it into a ggplot.
 
 ```{r}
 movies %>% 
@@ -238,7 +224,7 @@ We can do this with the `fct_reorder()` function, which takes two arguments: The
 movies %>% 
   slice_max(order_by = gross, n=20) %>% 
   ggplot(aes(x = gross, y = fct_reorder(title, gross))) +
-  geom_col(fill='blue') +
+  geom_col() +
   theme_bw()+
   labs(
     title = "",
@@ -294,7 +280,7 @@ gapminder %>%
   mutate(
     country = fct_reorder(country, lifeExp, median)
   ) %>%
-  ggplot(aes(year, country, fill = lifeExp)) + 
+  ggplot(aes(year, country, fill = lifeExp)) +
   geom_tile() +
   scale_fill_viridis_c(option = "C")
 ```
@@ -515,7 +501,7 @@ Even clean and tidy data files, such as this one, are rarely ready for plotting 
                            state, 
                            NA_character_)) %>%
     ungroup() %>%
-    filter(state %in% c("New York", "Florida", "California", "Texas"))
+    filter(state %in% c("New York", "California", "Texas"))
 ```
 
 No output is printed because we set the chunk options to hide.
@@ -537,7 +523,7 @@ df_deaths <- # this is a new dataframe object
                            state, 
                            NA_character_)) %>%
     ungroup() %>%
-    filter(state %in% c("New York", "Florida", "California", "Texas"))
+    filter(state %in% c("New York", "California", "Texas"))
 ```
 
 You should see `df_deaths` in your Environment panel and you can now re-use it for later analyses.
@@ -573,7 +559,7 @@ Next we'll tell `ggplot()` what type of geometric object to add-- let us add lin
 
 ```
 
-Notice the order in which states appear: California, Florida, New York, Texas. Since `state` is a character variable,the default ordering is alphabetical. We will not use the legend to the right, but what if we wanted to sort states by number of deaths?
+Notice the order in which states appear: California, New York, Texas. Since `state` is a character variable,the default ordering is alphabetical. We will not use the legend to the right, but what if we wanted to sort states by number of deaths?
 
 ## We have more to add to our plot, but first...
 
@@ -588,8 +574,8 @@ p <- ggplot(df_deaths, aes(x=days,
 p <- p + 
     scale_y_log10(breaks = c(1, 10, 20, 50, 100, 
                              200, 500, 1000, 2000, 5000, 10000, 20000, 50000 )) +
-    scale_x_continuous(breaks = seq(0, 630, by = 30) ,
-                       limits = c(1, 630)) +
+    scale_x_continuous(breaks = seq(0, 900, by = 30) ,
+                       limits = c(1, 900)) +
     geom_text_repel(aes(label = label),
                      nudge_x = 1,
                      na.rm = TRUE) 
@@ -597,13 +583,13 @@ p <- p +
 p  
 
 # We can also use facet_wrap() to get one plot per state
-p + facet_wrap(~state, scales = "free")
+p + facet_wrap(~state)
   
 ```
 
 ## Make your plots nicer
 
-You can lose hours and days making plots perfect. Let's use the Economist and FiveThirtyEight themes from the `ggthemes` library and. In addition, we will also use the `hrbrthemes` package and `theme_ft_rc` for a *ggplot2 theme with opinionated defaults and an emphasis on typography*.
+You can lose hours and days making plots perfect. Let's use the Economist theme from the `ggthemes` library and. 
 
 ```{r}
 p1 <- p + 
@@ -619,31 +605,6 @@ p1 <- p +
 
 p1
 
-
-p2 <- p + 
-    theme_fivethirtyeight() +
-    theme(legend.position = "none",
-          axis.title.x = element_text()) + 
-    labs(title = "Main title here- what question do you address?",
-         subtitle = "Daily Covid-19 deaths-- days since 3 daily deaths first recorded",
-         x = "Number of days since 3 daily deaths first recorded", 
-         y = "",
-         caption = "Source: https://github.com/nytimes/covid-19-data")
-
-p2
-
-
-p3 <-   p +
-     theme_ft_rc()+
-        theme(legend.position = "none",
-          axis.title.x = element_text()) + 
-    labs(title = "Main title here- what question do you address?",
-         subtitle = "Daily Covid-19 deaths-- days since 3 daily deaths first recorded",
-         x = "Number of days since 3 daily deaths first recorded", 
-         y = "",
-         caption = "Source: https://github.com/nytimes/covid-19-data")
-
-p3
 
 ```
 
@@ -673,7 +634,7 @@ df_deaths_rolling_mean <- df_deaths %>%   # this is a new object
                            state, 
                            NA_character_)) %>%
     ungroup() %>%
-    filter(state %in% c("New York", "Florida", "California", "Texas"))
+    filter(state %in% c("New York", "California", "Texas"))
 ```
 
 
@@ -685,8 +646,8 @@ p_7day <- ggplot(df_deaths_rolling_mean, aes(x=days,
 
 p_7day <- p_7day + 
     scale_y_log10(breaks = c(1, 10, 20, 50, 100, 200, 500, 1000 )) +
-    scale_x_continuous(breaks = seq(0, 630, by = 30) ,
-                       limits = c(1, 630)) +
+    scale_x_continuous(breaks = seq(0, 900, by = 30) ,
+                       limits = c(1, 900)) +
     geom_text_repel(aes(label = label),
                      nudge_x = 1,
                      na.rm = TRUE) 
@@ -694,7 +655,7 @@ p_7day <- p_7day +
 p_7day
 ```
 
-Let us again make these plots better using some themes
+Let us again make these plots better using the Economist theme
 ```{r}
 
 p1_7day <- p_7day + 
@@ -711,30 +672,6 @@ p1_7day <- p_7day +
 p1_7day
 
 
-p2_7day <- p_7day + 
-    theme_fivethirtyeight() +
-    theme(legend.position = "none",
-          axis.title.x = element_text()) + 
-    labs(title = "New deaths attributed to Covid-19 in NY, CA, TX, FL",
-         subtitle = "Seven-day rolling average of new deaths, by number of days since 3 average daily deaths first recorded",
-         x = "Number of days since 3 average daily deaths first recorded", 
-         y = "",
-         caption = "Source: https://github.com/nytimes/covid-19-data")
-
-p2_7day
-
-
-p3_7day <-  p_7day +
-     theme_ft_rc()+
-        theme(legend.position = "none",
-          axis.title.x = element_text()) + 
-    labs(title = "New deaths attributed to Covid-19 in NY, CA, TX, FL",
-         subtitle = "Seven-day rolling average of new deaths, by number of days since 3 average daily deaths first recorded",
-         x = "Number of days since 3 average daily deaths first recorded", 
-         y = "",
-         caption = "Source: https://github.com/nytimes/covid-19-data")
-
-p3_7day
 ```
 
 # Combining datasets with joins
@@ -770,7 +707,19 @@ CA_contributions <-  CA_contributions %>%
 ```
 
 ```{r left-join-solution}
+
+library(tictoc)
+
+tic()
 CA_contributions_2016 <- left_join(CA_contributions, zipcodes, by="zip")
+toc()
+
+tic()
+CA_contributions_2016 <- merge(CA_contributions, zipcodes, by="zip")
+toc()
+
+
+
 ```
 
 > `left_join()` is significantly faster than base R's `merge()` function, so please use `left_join()`
