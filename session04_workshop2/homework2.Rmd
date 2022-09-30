@@ -409,7 +409,7 @@ To create this animation is actually straight-forward. You manipulate your data,
   labs(title = 'Year: {frame_time}', 
        x = '% renewables', 
        y = 'CO2 per cap') +
-  transition_time(integer(year)) +
+  transition_time(year) +
   ease_aes('linear')
 ```
 
