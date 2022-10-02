@@ -103,39 +103,13 @@ There is an observed difference of about 1.77kg (68.44 - 66.67), and we notice t
 
 ## Hypothesis test with formula
 
-Write the null and alternative hypotheses for testing whether mean weights are different for those who exercise at least times a week and those who don’t.
+Write the null and alternative hypotheses for testing whether mean weights are different for those who exercise at least times a week and those who don’t. 
+
+For the `t.test()` to work you have to make sure you only have two categories for physical_3plus-- make sure you remove any NAs using `tidyr::drop_na(physical_3plus)`
 
 ```{r, t_test_using_R}
 
 t.test(weight ~ physical_3plus, data = yrbss)
-```
-
-# IMDB ratings: Differences between directors
-
-Recall the IMBD ratings data. I would like you to explore whether the mean IMDB rating for Steven Spielberg and Tim Burton are the same or not. I have already calculated the confidence intervals for the mean ratings of these two directors and as you can see they overlap. 
-
-
-```{r directors, echo=FALSE, out.width="100%"}
-knitr::include_graphics(here::here("images", "directors.png"), error = FALSE)
-```
-
-First, I would like you to reproduce this graph. You may find `geom_errorbar()` and `geom_rect()` useful.
-
-In addition, you will run a hpothesis test. You should use both the `t.test` command and the `infer` package to simulate from a null distribution, where you assume zero difference between the two.
-
-> Before anything, write down the null and alternative hypotheses, as well as the resulting test statistic and the associated t-stat or p-value. At the end of the day, what do you conclude?
-
-You can load the data and examine its structure
-
-```{r load-movies-data}
-movies <- read_csv(here::here("data", "movies.csv"))
-glimpse(movies)
-```
-
-Your R code and analysis should go here. If you want to insert a blank chunk of R code you can just hit `Ctrl/Cmd+Alt+I` 
-
-```{r}
-
 ```
 
 
@@ -181,13 +155,11 @@ mosaic::favstats (salary ~ gender, data=omega)
 
 > What can you conclude from your analysis? A couple of sentences would be enough
 
-You can also run a hypothesis testing, assuming as a null hypothesis that the mean difference in salaries is zero, or that, on average, men and women make the same amount of money. You should tun your hypothesis testing using `t.test()` and with the simulation method from the `infer` package.
+You can also run a hypothesis testing, assuming as a null hypothesis that the mean difference in salaries is zero, or that, on average, men and women make the same amount of money. You should tun your hypothesis testing using `t.test()`
 
 ```{r, hypothesis_testing}
 # hypothesis testing using t.test() 
 
-
-# hypothesis testing using infer package
 
 
 ```
