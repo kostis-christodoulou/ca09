@@ -54,11 +54,11 @@ Every two years, the Centers for Disease Control and Prevention conduct the [You
 
 This data is part of the `openintro` textbook and we can load and inspect it. There are observations on 13 different variables, some categorical and some numerical. The meaning of each variable can be found by bringing up the help file:
 
-?yrbss
+`?yrbss`
 
 ```{r}
 data(yrbss)
-glimpse(yrbss)
+skim(yrbss)
 ```
 
 Before you carry on with your analysis, it's is always a good idea to check with `skimr::skim()` to get a feel for missing values, summary statistics of numerical variables, and a very rough histogram.
@@ -105,7 +105,7 @@ There is an observed difference of about 1.77kg (68.44 - 66.67), and we notice t
 
 Write the null and alternative hypotheses for testing whether mean weights are different for those who exercise at least times a week and those who don’t. 
 
-For the `t.test()` to work you have to make sure you only have two categories for physical_3plus-- make sure you remove any NAs using `tidyr::drop_na(physical_3plus)`
+For the `t.test()` to work you have to make sure you only have two categories for `physical_3plus` -- make sure you remove any NAs using `tidyr::drop_na(physical_3plus)`
 
 ```{r, t_test_using_R}
 
