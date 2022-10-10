@@ -1,5 +1,5 @@
 ---
-title: 'Brexi Vote Analysis'
+title: 'Brexit Vote Analysis'
 author: "YOUR NAME HERE"
 date: "DATE HERE"
 output:
@@ -36,6 +36,10 @@ library(broom)
 
 #to check collinearity, we calculate VIF, Variance Inflation Factor
 library(car)
+
+# to check model performance + diagnostics
+library(performance)
+
 ```
 
 The goal is to test your software installation, to demonstrate competency in Markdown, and in the basics of `ggplot`.
@@ -114,8 +118,6 @@ A simple regression model estimates the slope, or the effect of immigrant popula
 ```{r brexit-model-leave-immigration}
 brexit_leave_immigration <- lm(leave_share ~ born_in_uk, data = brexit_results)
 
-get_regression_table(brexit_leave_immigration)
-get_regression_summaries(brexit_leave_immigration)
 
 mosaic::msummary(brexit_leave_immigration)
 ```
@@ -163,8 +165,7 @@ Let's look at the effect of both of these on the leave share with a multiple reg
 ```{r brexit-model-leave-age-education}
 leave_educ_age <- lm(leave_share ~ degree + age_18to24, data = brexit_results)
 
-get_regression_table(leave_educ_age)
-get_regression_summaries(leave_educ_age)
+mosaic::msummary(leave_educ_age)
 ```
 
 If we take the age of a constituency into account, a 1% increase in the proportion of the constituency with a university degree is associated with a 1.125 point drop in the share of leave votes (e.g. moving from 50% leave to 48.875% leave). Similarly, controlling for education, a 1% increase in the proportion of the constituency that is between 18 and 24 years old is associated with a 0.456 point drop in the share of leave vote (e.g. moving from 50% leave to 49.544%). 
@@ -216,9 +217,7 @@ brexit_results %>%
 
 leave_politics <- lm(leave_share ~ con_2015 + lab_2015 + ld_2015 + ukip_2015, 
                      data = brexit_results)
-
-get_regression_table(leave_politics)
-get_regression_summaries(leave_politics)
+mosaic::msummary((leave_politics))
 ```
 
 If we adjust for a constituency's Labour, LibDem, and UKIP votes, a 1% increase in the votes cast for the Conservative party in 2015 is associated with a 0.018 point decrease in the share of leave votes on, average (e.g. moving from 50% to 49.982%). If you look at the confidence interval for the slope (effect) of `con_2015`, it contains 0 so there, which is pretty much a sign that there's no effect.  
@@ -246,8 +245,7 @@ brexit_results %>%
 leave_everything <- lm(leave_share ~ con_2015 + lab_2015 + ld_2015 + ukip_2015 +
                          degree + age_18to24 + born_in_uk + male + unemployed, data = brexit_results)
 
-get_regression_table(leave_everything)
-get_regression_summaries(leave_everything)
+mosaic::msummary(leave_everything)
 ```
 
 Any colinearity issues?
@@ -256,15 +254,16 @@ Any colinearity issues?
 library(car)
 
 vif(leave_everything)
+performance::check_model(leave_everything)
 
 
 #labour VIF > 10, so remove it and rerun
 leave_everything2 <- lm(leave_share ~ con_2015 + ld_2015 + ukip_2015 +
                          degree + age_18to24 + born_in_uk + male + unemployed, data = brexit_results)
 
-get_regression_table(leave_everything2)
-get_regression_summaries(leave_everything2)
+mosaic::msummary(leave_everything2)
 vif(leave_everything2)
+performance::check_model(leave_everything2)
 
 ```
 
@@ -282,9 +281,9 @@ final_model <- lm(leave_share ~ con_2015 +  ukip_2015 +
                          degree + age_18to24 +  male + unemployed, data = brexit_results)
 mosaic::msummary(final_model)
 
-get_regression_table(final_model)
-get_regression_summaries(final_model)
 vif(final_model)
+performance::check_model(final_model)
+
 
 ```
 

@@ -8,6 +8,7 @@ library(janitor)
 library(huxtable)
 library(skimr)
 library(car)
+library(performance)
 library(ggfortify)
 
 url <- "https://happiness-report.s3.amazonaws.com/2021/DataPanelWHR2021C2.xls"
@@ -82,3 +83,5 @@ huxreg(model1, model2, model3, model4,model5,
 car::vif(model3)
 car::vif(model4)
 car::vif(model5)
+
+check_model(model5)
