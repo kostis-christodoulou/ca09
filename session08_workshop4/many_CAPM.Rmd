@@ -400,7 +400,7 @@ capm_results %>%
 # Where are the SP500 companies headquartered
 capm_results %>% 
    count(headquarters_location, sort=TRUE) %>% 
-  View()
+  head(20)
 
 
 # plot betas
@@ -450,6 +450,6 @@ capm_results %>%
   kable()%>%
   kable_styling(bootstrap_options = c("striped", "hover", "condensed"))
 
-# save file with stock data, that you could read using vroom::vroom()
+# save file with stock data, that you could read using vroom::vroom() rather than downloading
 # write_csv(sp500_stocks, "data/sp500_stocks.csv")
 ```
