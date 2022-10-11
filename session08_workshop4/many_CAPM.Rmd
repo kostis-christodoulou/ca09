@@ -272,7 +272,7 @@ tickers <- table1 %>%
 
 # Download stock price data for all SP500 stocks
 
-```{r get_price_data_sp500, message=FALSE, warning=FALSE, cache=TRUE}
+```{r get_price_data_sp500, message=FALSE, warning=FALSE, cache=TRUE, eval=FALSE}
 # Notice the cache=TRUE argument in the chunk options. Because getting data is time consuming, 
 # cache=TRUE means that once it downloads data, the chunk will not run again next time you knit your Rmd
 
@@ -286,6 +286,14 @@ toc()
 
 glimpse(sp500_stocks) # examine the structure of the resulting data frame
 ```
+
+```{r load_price_data_sp500, message=FALSE, warning=FALSE, cache=TRUE}
+# use this file that has the downloaded data
+sp500_stocks <- vroom::vroom(here::here("data/sp500_stocks.csv.zip"))
+```
+
+
+
 
 ```{r sp500_CAPM, warning=FALSE, message=FALSE, cache=TRUE}
 #calculate monthly  returns
