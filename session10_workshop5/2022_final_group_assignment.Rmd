@@ -1,0 +1,331 @@
+---
+title: 'CA09 Group Project: Rats!'
+author: "Study Group XX"
+date: "18 Oct 2022"
+output:
+  html_document:
+    highlight: zenburn
+    theme: flatly
+    toc: yes
+    toc_float: yes
+    number_sections: yes
+    code_folding: show
+---
+
+```{r setup, include=FALSE}
+# leave this chunk alone
+options(knitr.table.format = "html") 
+knitr::opts_chunk$set(warning = FALSE, message = FALSE, 
+  comment = NA, dpi = 300)
+```
+
+```{r load-libraries, echo=FALSE}
+
+library(tidyverse) # the usual stuff: dplyr, readr, and other goodies
+library(lubridate) # to handle dates
+library(GGally) # for correlation-scatter plot matrix
+library(janitor) # clean_names()
+library(broom) # use broom:augment() to get tidy table with regression output, residuals, etc
+library(huxtable) # to get summary table of all models produced
+library(kableExtra) # for formatting tables
+library(skimr) # for skim
+library(mosaic)
+library(leaflet) # for interactive HTML maps
+library(ggtext)
+library(viridis)
+library(kableExtra)
+library(vroom)
+library(here)
+library(performance)  # to produce residual diagnostic plots
+library(ggtext)
+library(patchwork)
+```
+
+New York City is full of urban wildlife, and rats are one of the city’s most infamous animals. Rats in NYC are plentiful and in September 2015 [a viral video of a brown rat carrying a slice of pizza down the steps of a NYC subway station](https://www.youtube.com/watch?v=3i0_uyGyvis) in Manhattan created  the legend of [Pizza Rat](https://en.wikipedia.org/wiki/Pizza_Rat).
+
+The source for the data of rat sightings in the city is from NYC's [311 Service Requests from 2010 to Present](https://data.cityofnewyork.us/Social-Services/Rat-Sightings/3q43-55fe). This is a dataset that is pretty much constantly updated and I downloaded this dataset on 11-Oct-2022. For this group project, you will use `R`, `dplyr`, and `ggplot2` to explore and explain the data, and tell an interesting story. The data fields are shown below and a [full data dictionary can be found here](https://data.cityofnewyork.us/Social-Services/Rat-Sightings/3q43-55fe) 
+
+
+# Loading te data
+
+I have provided some starter code below. A couple comments about it:
+
+- By default, `vroom()` treats cells that are empty or "NA" as missing values. This rat dataset uses "N/A" to mark missing values, so we need to add that as a possible marker of missingness (hence `na = c("", "NA", "N/A")`)
+- To make life easier, I **always** use `janitor::clean_names()` to remove spaces, upper case letters, etc. from variable names.
+- I've also created a few date-related variables (`sighting_year`, `sighting_month`, `sighting_day`, and `sighting_weekday`). You don't have to use them, but they're there if you need them. The functions that create these, like `year()` and `wday()` are part of the **lubridate** library.
+- The date/time variables are formatted like `09/14/2018 05:46:05 PM`, which R is not able to automatically parse as a date when reading the CSV file. You can use the `mdy_hms()` function in the **lubridate** library to parse dates that are structured as "month-day-year-hour-minute". There are also a bunch of other iterations of this function, like `ymd()`, `dmy()`, etc., for other date formats.
+- There's a few rows (about 10) with an unspecified borough, so I filter them out.
+- I use `str_to_title()` to turn the upper case borough into a more legible format, from `MANHATTAN` to `Manhattan` and from `STATEN ISLAND` to `Staten Island`
+
+```{r load-rat-data}
+
+# If you get an error "All formats failed to parse. No formats found",
+# it's because the mdy_hms function couldn't parse the date. The date
+# variable *should* be in this format: "09/14/2018 05:46:05 PM", but in some
+# rare instances, it might load without the seconds as "09/14/2018 05:00 PM".
+# If there are no seconds, use mdy_hm() instead of mdy_hms().
+
+rats <- vroom::vroom(here::here("data/Rat_Sightings.csv.zip"), na = c("", "NA", "N/A")) %>% 
+  janitor::clean_names() %>% 
+  mutate(created_date = mdy_hms(created_date)) %>%
+  mutate(sighting_date = as.Date(created_date), # just the date without hour info
+         sighting_year = year(created_date),
+         sighting_month = month(created_date),
+         sighting_month_name = month(created_date, label = TRUE, abbr = FALSE),
+         sighting_day = day(created_date),
+         sighting_weekday = wday(created_date, label = TRUE, abbr = FALSE)
+         ) %>%
+  filter(borough != "Unspecified") %>%  
+  mutate(borough = str_to_title(borough))
+```
+
+You'll summarise the data with functions from **dplyr**, including stuff like `count()`, `arrange()`, `filter()`, `group_by()`, `summarise()`, and `mutate()`. Here are some examples of ways to summarise the data:
+
+```{r dplyr-examples, eval=FALSE}
+# See the count of rat sightings by weekday
+rats %>%
+  count(sighting_weekday)
+
+# Assign a summarixed data frame to an object to use it in a plot
+rats_by_weekday <- rats %>%
+  count(sighting_weekday, sighting_year)
+
+
+ggplot(rats_by_weekday, aes(x = fct_rev(sighting_weekday), y = n)) + 
+  geom_col() +
+  coord_flip() +
+  facet_wrap(~ sighting_year)
+
+
+# See the count of rat sightings by weekday and borough
+rats %>%
+  count(sighting_weekday, borough, sighting_year)
+
+# An alternative to count() is to specify the groups with group_by() and then
+# be explicit about how you're summarising the groups, such as calculating the
+# mean, standard deviation, or number of observations (we do that here with
+# `n()`).
+rats %>%
+  group_by(sighting_weekday, borough) %>%
+  summarise(n = n())
+```
+
+# Exploratory Data Analysis (EDA)
+
+## Background Info
+
+In the [R4DS Exploratory Data Analysis chapter](http://r4ds.had.co.nz/exploratory-data-analysis.html), the authors
+state:
+
+> "Your goal during EDA is to develop an understanding of your data. The easiest way to do this is to use questions as tools to guide your investigation...EDA is fundamentally a creative process. And like most creative processes, the key to asking quality questions is to generate a large quantity of questions."
+
+
+Conduct a thorough EDA. Recall that an EDA involves three things:
+
+* Looking at the raw values.
+    * `dplyr::glimpse()`
+* Computing summary statistics of the variables of interest.
+    * `skimr::skim()`
+    * `corrr::correlate()`
+    * `mosaic::favstats()`
+* Creating informative visualizations.
+    * `ggplot2::ggplot()`
+        * `geom_histogram()` or `geom_density()` for numeric continuous variables
+        * `geom_bar()` or `geom_col()` for categorical variables
+    * `GGally::ggpairs()` for scaterrlot/correlation matrix
+        * Note that you can add transparency to points/density plots in the `aes` call, for example: `aes(colour = borough, alpha = 0.4)`
+        
+You may wish to have a level 1 header (`#`) for your EDA, then use level 2 sub-headers (`##`) to make sure you cover all three EDA bases. **At a minimum** you should answer these questions:
+
+- How many variables/columns? How many rows/observations?
+- Which variables are numbers?
+- Which are categorical or *factor* variables (numeric or character variables with variables that have a fixed and known set of possible values?
+- What are the correlations between variables? Does each scatterplot support a linear relationship between variables? Do any of the correlations appear to be conditional on the value of a categorical variable?
+
+At this stage, you may also find you want to use `filter`, `mutate`, `arrange`, `select`, or `count`. Let your questions lead you! 
+
+> In all cases, please think about the message your plot is conveying. Don’t just say "This is my X-axis, this is my Y-axis", but rather what’s the **so what** of the plot. Tell some sort of story and speculate about the differences in the patterns in no more than a paragraph.
+        
+### Plotting figures
+
+For each table, make sure to include a relevant figure. One tip for starting is to draw out on paper what you want your x- and y-axis to be first and what your `geom` is; that is, start by drawing the plot you want `ggplot` to give you. 
+
+Your figure does not have to depict every last number from the data aggregation result. Use your judgement. It just needs to complement the table, add context, and allow for some sanity checking both ways.
+
+Notice which figures are easy/hard to make, which data formats make better inputs for plotting functions vs. for human-friendly tables. 
+
+
+
+### Mapping 
+
+Visualisations of feature distributions and their relations are key to understanding a data set, and they can open up new lines of exploration. While we do not have time to go into all the wonderful geospatial visualisations one can do with R, you can use the following code to start with a map of your city, and overlay all rat sighting coordinates to get an overview of the spatial distribution of reported rat activity. For this visualisation we use the `leaflet` package, which includes a variety of tools for interactive maps, so you can easily zoom in-out, click on a point to get the actual location type and date/time  of sighting. If you wanted to, you can learn more about `leafelt` the package that draws the interactive map, by following [the relevant Datacamp course on mapping with leaflet](https://www.datacamp.com/courses/interactive-maps-with-leaflet-in-r)
+
+
+```{r, out.width = '100%'}
+
+# let's get the top 7 location types, which account for > 90% of all cases
+# this code generates a vector with the top 7 location types
+top_location_types <- rats %>%
+  count(location_type, sort=TRUE) %>%
+  mutate(perc = 100*n/sum(n)) %>%
+  slice(1:7) %>%
+  select(location_type) %>%
+  pull()
+
+# lets us choose how to colour each point. What palette and colours to use? 
+# A great site to get the relevant color hex codes for maps is 
+# https://colorbrewer2.org/#type=qualitative&scheme=Set1&n=7
+my_colours <- c('#e41a1c','#377eb8','#4daf4a','#984ea3','#ff7f00','#ffff33','#a65628')
+
+# create a function point_fill, that assigns `my_colours` to different location types
+# you can read more here https://rstudio.github.io/leaflet/colors.html
+point_fill <- colorFactor(palette = my_colours,  
+                          rats$location_type)
+
+
+
+rats %>%
+  filter(sighting_year == 2021) %>% # just show 2021 data
+  filter(location_type %in% top_location_types) %>%
+  leaflet() %>% 
+  addProviderTiles("OpenStreetMap.Mapnik") %>% 
+  addCircleMarkers(lng = ~longitude, 
+                   lat = ~latitude, 
+                   radius = 1, 
+                   color = ~point_fill(location_type), 
+                   fillOpacity = 0.6, 
+                   popup = ~created_date,
+                   label = ~location_type) %>%
+  
+  addLegend("bottomright", pal = point_fill, 
+            values = ~location_type,
+            title = "2021 Location Type",
+            opacity = 0.5)
+```
+
+## Your EDA task
+
+Summarise the data somehow. The raw data has more than 200,000 rows, which means you’ll need to aggregate the data (`filter()`, `group_by()`, and `summarise()` are your friends). Consider looking at the number of sightings per borough, per year, per dwelling type, etc., or a combination of these, like the change in the number sightings across the 5 boroughs between, say, 2014 and 2021.
+
+# Inferential Statistics
+
+Recall that the whole point of inferential statistics is we want to make a stateent/inferene about the population, given the sample statistics we have observed. In this case, our sample is the number of rat sightings by borough and year-- surely there's more rats, we just dont seem them all! Some people argue that rat sightings are related to human activity-- where there's food and junk that humans create, rats will surely appear.
+
+## Your task: Rat sightings vs a borough's human population
+
+How closely do rat sightings track the human population in a borough? Are the % of rat sightings in each borough related to that borough's population? We got data from the 2020 census and can create a small tibble `nyc_population` with the relevant data.
+
+```{r, nyc_population}
+# https://en.wikipedia.org/wiki/Boroughs_of_New_York_City
+# NYC Boroughs, 2020 census data
+# Bronx  1,472,654	
+# Brooklyn 2,736,074	
+# Manhattan 1,694,263	
+# Queens 2,405,464	
+# Staten Island  495,747
+
+nyc_population <- tibble(
+  borough = c("Bronx", "Brooklyn", "Manhattan", "Queens", "Staten Island"),
+  population = c(1472654,2736074,1694263,2405464,495747)
+) 
+```
+
+Your task is to calculate Cofidence Intervals (CIs) for the % of rat sightings in each borough and in each year between 2014 and 2022. This will give you CIs for the percentage of NYC rats that exist in that borugh/year You then need to compare those CIs
+ with the <span style='color:#FFA500'><b>human population %</b></span> as shown in the following graph. 
+
+<br>
+To change the colour of the text in the title so it matches the orange dot corresponding to the population % , you need to use the `ggtext` package and the following code
+
+```{r, eval = FALSE}
+library(ggtext)
+
+# your ggplot code +
+
+  labs(
+    title = "Mouse sightings don't always track a <span style='color:#FFA500'><b>borough's population</span></b>"
+  ) +
+
+  theme(
+    plot.title.position = "plot",
+    plot.title = element_textbox_simple(size=16)) +
+  NULL
+```
+
+
+# Regression
+
+Besides the variables included in the `rats` dataframe, we have also downloaded weather data for NYC which can be found at the `nyc_weather` dataframe. It may be the case that rats are more active when it's warmer? or when it rains?
+
+Build a regression model that helps you explain the number of sightings per day. You can use both the original data set, as well as the `nyc_weather`, the variables of which are shown below.
+
+```{r, load-weather-data, echo=FALSE}
+nyc_weather <-  read_csv(here::here("data/nyc_weather.csv")) %>% 
+  janitor::clean_names()  
+
+glimpse(nyc_weather)
+```
+
+In essence, we want to see how many rat sightings we have per day in each borough. Please use the following code to join the two dataframes before you run your regression model.
+
+```{r}
+rats_weather <- rats %>%
+  mutate(date = as.Date(created_date)) %>% 
+  count(borough,date) %>%
+  left_join(nyc_weather, by = c("date" = "datetime")) %>%
+  mutate(month = month(date),
+         month_name = month(date, label=TRUE),
+         day = wday(date),
+         day_of_week = wday(date, label=TRUE))
+
+```
+
+## Your regression tasks
+
+- Use histograms or density plots to examine the distributions of `n`, the number of rat sightings, and `log(n)`. Which variable should you use for the regression model? Why?
+
+- Fit a regression model called `model1` with the following explanatory variables: `temp`. 
+
+  - Is the effect of `temp` significant? Why?
+  - What proportion of the overall variability in rat sightings does `temp` explain?
+
+
+- Fit a regression model called `model2` with the following explanatory variables: `temp` and `borough` 
+
+  - Is the effect of `temp` significant? Why?
+  - What proportion of the overall variability in rat sightings does this model explain?
+  - Why is `Bronx` missing from the boroughs in our model?
+  - How do we interpret the coefficients for each of the boroughs? 
+  - What's the difference between fitting the model of `n` versus `log(n)`
+  - If you use a `log` transformation, the intrepretation of the betas/coefficients is slightly different. You can read more about that here [FAQ HOW DO I INTERPRET A REGRESSION MODEL WHEN SOME VARIABLES ARE LOG TRANSFORMED?](https://stats.oarc.ucla.edu/other/mult-pkg/faq/general/faqhow-do-i-interpret-a-regression-model-when-some-variables-are-log-transformed/)
+
+- **Further variables/questions to explore on your own**
+
+Our dataset has many more variables, so here are some ideas on how you can extend your analysis
+
+  - Are other weather variables useful in explaining `n`?
+  - We also have data on days of the week, month of the year, etc. Could those be helpful?
+  - What's the best model you can come up with? 
+  - Is this a regression model to predict or explain? If we use it to predict, what's the Residual SE 
+
+
+## Diagnostics, collinearity, summary tables
+
+As you keep building your models, it makes sense to:
+
+1. Check the residuals, using `performance::check_model(model_x)`. You will always have some deviation from normality, especially for very high values of `n`
+1. As you start building models with more explanatory variables, make sure you use `car::vif(model_x)` to calculate the **Variance Inflation Factor (VIF)** for your predictors and determine whether you have colinear variables. A general guideline is that a VIF larger than 10 is large, and your model may suffer from collinearity. Remove the variable in question and run your model again without it.
+1. Create a summary table, using `huxtable` (https://mfa2023.netlify.app/example/modelling_side_by_side_tables/) that shows which models you worked on, which predictors are significant, the adjusted $R^2$, and the Residual Standard Error.
+
+# Assessment 
+
+There is a detailed assessment rubric below.
+
+```{r rubric, echo=FALSE, out.width="100%"}
+knitr::include_graphics(here::here("images", "/group_project_rubric.jpg"), error = FALSE)
+```
+
+It's not enough for your code to run-- it must be well documented and commented, so another person can read your work, reproduce your code, and easily understand what you are trying to achieve. 
+
+```{r your_code_is_the_worst, echo=FALSE, out.width="100%"}
+knitr::include_graphics(here::here("images", "/your_code_is_the_worst.jpg"), error = FALSE)
+```
