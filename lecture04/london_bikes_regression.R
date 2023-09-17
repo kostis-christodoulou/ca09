@@ -60,5 +60,5 @@ msummary(model1)
 
 
 # produce summary table comparing models using huxtable::huxreg()
-# have a look at https://mam2023.netlify.app/example/modelling_side_by_side_tables/
+# have a look at https://mfa2023.netlify.app/example/modelling_side_by_side_tables/
 

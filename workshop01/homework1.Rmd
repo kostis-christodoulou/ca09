@@ -42,6 +42,7 @@ library(janitor)
 library(vroom)
 library(tidyquant)
 library(rvest) # to scrape wikipedia page
+library(PerformanceAnalytics) # skewness- kurtosis
 ```
 
 
@@ -212,7 +213,7 @@ myStocks_returns_annual <- myStocks %>%
                cols = c(nested.col))
 ```
 
-Create a table where you summarise monthly returns for each of the stocks and `SPY`; min, max, median, mean, SD.
+Create a table where you summarise monthly returns for each of the stocks and `SPY`; min, max, median, mean, SD, and variance `var`. Also, using the `PerformanceAnalytics` package, calculate the skenwness and kurtosis, using `PerformanceAnalytics::skeweness()` and `PerformanceAnalytics::kurtosis()` 
 
 ```{r summarise_monthly_returns}
 

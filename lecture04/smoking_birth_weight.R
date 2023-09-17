@@ -78,3 +78,4 @@ huxreg(model1, model2, model3, model4, model5, model6,
        bold_signif = 0.05
 ) %>% 
   set_caption('Comparison of models')
+

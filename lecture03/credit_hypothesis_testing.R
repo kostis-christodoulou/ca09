@@ -43,6 +43,8 @@ credit %>%
   theme_bw()
 
 t.test(balance ~ married, data = credit)
+model1 <- lm(balance ~ married, data = credit)
+summary(model1)
 
 
 # ---------------------------
@@ -67,4 +69,6 @@ credit %>%
   theme_bw()
 
 t.test(balance ~ student, data = credit)
+model2 <- lm(balance ~ student, data = credit)
+mosaic::msummary(model2)
 

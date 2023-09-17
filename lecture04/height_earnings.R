@@ -3,6 +3,7 @@ library(mosaic)
 library(broom)
 library(skimr)
 library(GGally)
+library(huxtable)
 options(scipen=999, show.signif.stars=FALSE, digits=4)
 
 
@@ -10,8 +11,6 @@ height_earnings <- read_csv(here("data", "height_earnings.csv"))
 
 skim(height_earnings)
 
-# Quick summary stats
-summary(height_earnings)
 
 
 
@@ -72,3 +71,4 @@ huxreg(model0, model1, model2, model3, model4,
        stars = NULL
 ) %>% 
   set_caption('Comparison of models')
+

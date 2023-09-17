@@ -45,7 +45,6 @@ bank_salaries %>%
   count()
 
 favstats(salary~job_grade, data=bank_salaries)
-favstats(gender~job_grade, data=bank_salaries)
 
 model7 <- lm(salary ~ years_bank*gender +  job_grade*gender, data=bank_salaries)
 mosaic::msummary(model7)
@@ -60,3 +59,4 @@ huxreg(model1,  model2, model3, model4, model5, model6, model7,
        stars = NULL
 ) %>% 
   set_caption('Comparison of models')
+
