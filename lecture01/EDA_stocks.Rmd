@@ -1,0 +1,418 @@
+---
+title: EDA on Stock returns
+author: Kostis Christodoulou
+date: "`r Sys.Date()`"
+output:
+  html_document:
+    theme: journal
+    highlight: monochrome
+    toc: yes
+    toc_float: yes
+    number_sections: true
+  word_document:
+    toc: yes
+---
+  
+  
+  
+  
+```{r, setup, echo=FALSE}
+knitr::opts_chunk$set(
+  message = FALSE, 
+  warning = FALSE, 
+  tidy=FALSE,     # display code as typed
+  size="small")   # slightly smaller font for code
+options(digits = 3)
+
+# default figure size
+knitr::opts_chunk$set(
+  fig.width=6.75, 
+  fig.height=6.75,
+  fig.align = "center"
+)
+```
+
+
+```{r load-libraries, warning=FALSE, message=FALSE, echo=FALSE}
+library(tidyverse)  # Load ggplot2, dplyr, and all the other tidyverse packages
+library(lubridate)
+library(here)
+library(skimr)
+library(janitor)
+library(vroom)
+library(tidyquant)
+library(rvest)    # scrape websites
+library(purrr)  
+library(lubridate) #to handle dates
+library(ggrepel)
+```
+
+
+# Returns of financial stocks
+
+Next, let's choose the [Dow Jones Industrial Average (DJIA)](https://en.wikipedia.org/wiki/Dow_Jones_Industrial_Average) stocks and their ticker symbols and download some data. Besides the thirty stocks that make up the DJIA, we will also add `SPY` which is an SP500 ETF (Exchange Traded Fund).
+
+We will use the `rvest` package to scrape the Wikipedia page for the constituents of DJIA
+
+```{r, tickers_from_wikipedia}
+
+djia_url <- "https://en.wikipedia.org/wiki/Dow_Jones_Industrial_Average"
+
+
+#get tables that exist on URL
+tables <- djia_url %>% 
+  read_html() %>% 
+  html_nodes(css="table")
+
+
+# parse HTML tables into a dataframe called djia. 
+# Use purr::map() to create a list of all tables in URL
+djia <- map(tables, . %>% 
+               html_table(fill=TRUE)%>% 
+               clean_names())
+
+
+# constituents
+table1 <- djia[[2]] %>% # the second table on the page contains the ticker symbols
+  mutate(date_added = ymd(date_added),
+         
+         # if a stock is listed on NYSE, its symbol is, e.g., NYSE: MMM
+         # We will get prices from yahoo finance which requires just the ticker
+         
+         # if symbol contains "NYSE*", the * being a wildcard
+         # then we jsut drop the first 6 characters in that string
+         ticker = ifelse(str_detect(symbol, "NYSE*"),
+                          str_sub(symbol,7,11),
+                          symbol)
+         )
+
+# we need a vector of strings with just the 30 tickers + SPY  + VIX
+tickers <- table1 %>% 
+  select(ticker) %>% 
+  pull() %>% # pull() gets them as a sting of characters
+  c("SPY", "^VIX") # and lets us add SPY, the SP500 ETF, and the volatility index, VIX
+
+```
+
+
+
+
+```{r get_price_data, message=FALSE, warning=FALSE, cache=TRUE}
+# Notice the cache=TRUE argument in the chunk options. Because getting data is time consuming, 
+# cache=TRUE means that once it downloads data, the chunk will not run again next time you knit your Rmd
+
+myStocks <- tickers %>% 
+  tq_get(get  = "stock.prices",
+         from = "2000-01-01",
+         to = Sys.Date()) %>% # today's date
+  group_by(symbol) 
+
+glimpse(myStocks) # examine the structure of the resulting data frame
+```
+
+# Calculate daily and monthly returns
+
+Financial performance analysis depend on returns; If I buy a stock today for 100 and I sell it tomorrow for 101.75, my one-day return, assuming no transaction costs, is 1.75%. So given the adjusted closing prices, our first step is to calculate daily and monthly returns.
+
+
+```{r calculate_returns, message=FALSE, warning=FALSE, cache=TRUE}
+#calculate daily returns
+myStocks_returns_daily <- myStocks %>%
+  tq_transmute(select     = adjusted, 
+               mutate_fun = periodReturn, 
+               period     = "daily", 
+               type       = "log",
+               col_rename = "daily_returns",
+               cols = c(nested.col))  
+
+#calculate monthly  returns
+myStocks_returns_monthly <- myStocks %>%
+  tq_transmute(select     = adjusted, 
+               mutate_fun = periodReturn, 
+               period     = "monthly", 
+               type       = "arithmetic",
+               col_rename = "monthly_returns",
+               cols = c(nested.col)) 
+```
+
+
+# What do monthly returns of `AAPL` and `SPY` look like?
+
+```{r}
+myStocks_returns_monthly %>% 
+  filter(symbol %in% c("AAPL", "SPY")) %>% 
+  ggplot()+
+  aes(x=monthly_returns, fill = symbol)+
+  geom_histogram(alpha = 0.75)+
+    facet_wrap(~ symbol, 
+             scales = "free",
+             ncol=1)+
+  theme_bw()+
+  theme(legend.position = "none")+
+  scale_x_continuous(label = scales::percent)+
+  labs(x=NULL, y=NULL,
+       title = "Distribution of Monthly Returns, Jan 2020-Aug 2023")
+
+
+myStocks_returns_monthly %>% 
+  filter(symbol %in% c("AAPL", "SPY")) %>% 
+  mosaic::favstats(monthly_returns ~ symbol, data = .)
+
+```
+
+
+
+# Calculate total return index since Jan 2000
+
+```{r}
+total_returns <- myStocks_returns_daily %>% 
+  group_by(symbol) %>% 
+  mutate(total_return = 1000*cumprod(1+daily_returns)) %>% 
+  ungroup()
+
+total_returns %>% 
+  filter(!symbol %in%   c("SPY", "^VIX")) %>% 
+  group_by(symbol) %>% 
+  drop_na(daily_returns) %>% 
+  mutate(total_return = 1000*cumprod(1+daily_returns)) %>% 
+  ungroup() %>% 
+  mutate(symbol =  fct_reorder(symbol, -total_return, mean)) %>% 
+  ggplot()+
+  aes(x = date, y= total_return, colour = symbol, group = symbol)+
+  geom_line(alpha = 0.85)+
+  theme_bw()+
+  theme(legend.position = "none")+
+  theme(axis.text.x = element_text(angle = 90))+
+  facet_wrap(~symbol, scales="free_y", ncol=3)+
+  labs(
+    x=NULL, y=NULL,
+    title = "Total Return, Jan 2020- now",
+    subtitle = "Growth of 1000$ invested in Jan 2020"
+  )
+```
+
+
+# Visualise distribution of monthly returns
+
+```{r}
+#visualise monthly returns since 2010, for each of the 30 DJIA stocks
+myStocks_returns_monthly %>% 
+  filter(symbol != "^VIX", symbol != "SPY") %>% 
+  filter(date >= "2010-01-01") %>% 
+  ggplot(aes(x = monthly_returns)) +
+  geom_density(aes(colour = symbol), alpha = 1) +
+  geom_histogram(aes(fill = symbol), alpha = 0.4, binwidth = 0.005)+
+  facet_wrap(~symbol, nrow=7)+
+  theme_bw(8)+
+  theme(legend.position = "none") +
+  scale_x_continuous(labels = scales::percent) +
+  labs(
+    title = "Distribution of monthly returns for DJIA stocks",
+    subtitle = "Jan 2010 - now",
+    x = "Monthly returns (%)",
+    y = "" )+
+  NULL
+
+
+```
+
+# Visualise Risk-Return tradeoff
+
+```{r, risk_return, echo=FALSE}
+
+by_year_monthly <- myStocks_returns_monthly %>% 
+  mutate(year = year(date),
+         month=month(date),
+         month_name = month(date, label=TRUE)
+  )
+
+cols <- c("grey10","tomato")
+
+  
+by_year_monthly %>% 
+  group_by(year,symbol) %>% 
+  filter(year>=2018) %>% 
+  filter(symbol != "^VIX") %>% 
+  summarise(mean_return = mean(monthly_returns, na.rm=TRUE),
+            sd_return = sd(monthly_returns, na.rm=TRUE),
+            ) %>% 
+  mutate(sp500 = ifelse(symbol == "SPY", TRUE, FALSE)) %>% 
+  
+  ggplot(aes(x=sd_return, y = mean_return))+
+  geom_point(aes(color = sp500))+
+  geom_text_repel(aes(label = symbol, color = sp500), size = 3)+
+  theme_bw()+
+  scale_colour_manual(values = cols)+
+  facet_wrap(~year,nrow = 5)+
+  theme(legend.position = "none")+
+  scale_x_continuous(labels = scales::percent) +
+  scale_y_continuous(labels = scales::percent) +
+  labs(
+    title = "Risk-Return tradeoff for DJIA stocks",
+    subtitle = "Monthly returns, Jan 2018- now",
+    x = "Risk (SD of monthly returns)",
+    y = "Return (Mean)" )+
+  NULL
+
+```
+
+
+
+
+# Visualise 2020 Risk-Return tradeoff
+
+```{r, risk_return, echo=FALSE}
+
+by_year_monthly <- myStocks_returns_monthly %>% 
+  mutate(year = year(date),
+         month=month(date),
+         month_name = month(date, label=TRUE)
+  )
+
+cols <- c("grey10","tomato")
+
+  
+by_year_monthly %>% 
+  group_by(year,symbol) %>% 
+  filter(year== 2018) %>% 
+  filter(symbol != "^VIX") %>% 
+  summarise(mean_return = mean(monthly_returns, na.rm=TRUE),
+            sd_return = sd(monthly_returns, na.rm=TRUE),
+            ) %>% 
+  mutate(sp500 = ifelse(symbol == "SPY", TRUE, FALSE)) %>% 
+  
+  ggplot(aes(x=sd_return, y = mean_return))+
+  geom_point(aes(color = sp500))+
+  geom_text_repel(aes(label = symbol, color = sp500), size = 4)+
+  theme_bw()+
+  scale_colour_manual(values = cols)+
+  facet_wrap(~year,nrow = 5)+
+  theme(legend.position = "none")+
+  scale_x_continuous(labels = scales::percent) +
+  scale_y_continuous(labels = scales::percent) +
+  labs(
+    title = "Risk-Return tradeoff for DJIA stocks",
+    subtitle = "Monthly returns, 2020",
+    x = "Risk (SD of monthly returns)",
+    y = "Return (Mean)" )+
+  NULL
+
+```
+
+
+# Correlation-Scatterplot matrix of monthly returns for a few stocks, and the SPY
+
+```{r}
+library(GGally)
+
+myStocks_returns_monthly %>% 
+  # choose a few stocks
+  filter(symbol %in% c("SPY", "AAPL","BA","DIS","PG", "JPM", "GS", "MCD", "MRK", "MSFT")) %>% 
+
+  # table must be in wide format--  each column should be the returns of a stock
+  pivot_wider(
+    names_from = symbol,
+    values_from = monthly_returns
+  ) %>% 
+  select(-date) %>% 
+  
+  ggpairs(alpha) + 
+  theme_bw()
+
+
+```
+
+
+# Rolling, 6-month calculation of SD
+
+```{r}
+library(zoo)
+window <- 6
+
+rolling_sd <- myStocks_returns_monthly %>% 
+  filter(symbol %in% c("AAPL", "AXP", "BA", "SPY")) %>% 
+  group_by(symbol) %>% 
+
+  
+      mutate(
+        rolling_sd = zoo::rollapply(monthly_returns, 
+                                     FUN = sd, # use function sd, to calculate standard deviation
+                                     width = window,
+                                     #By default, NA are removed, so we use the fill
+                                     fill = NA)
+    
+  )
+
+
+rolling_sd %>% 
+  ggplot(aes(x=date, y = rolling_sd, group=symbol, colour=symbol))+
+  geom_line()+
+  theme_bw()+
+  scale_y_continuous(labels = scales::percent) +
+  scale_x_date(date_breaks="2 years", 
+               date_labels = "%b-%Y")+
+  labs(title = "Rolling 6-month risk (SD) calculation",
+       x = "",
+       y = "")+
+  facet_wrap(~symbol, ncol=1)+
+  theme(legend.position = "none")+
+  NULL
+```
+
+
+# Is there a relation between SPY and VIX?
+
+```{r}
+
+myStocks_returns_daily %>% 
+  filter(symbol %in%   c("SPY", "^VIX")) %>% 
+  pivot_wider(names_from = symbol,
+              values_from = daily_returns) %>% 
+  ggplot()+
+  aes(x=`^VIX`, y = SPY) %>% 
+  geom_point(alpha = 0.75)+
+  theme_bw()
+```
+
+## Let us `mutate` and get year and month values
+
+```{r}
+by_year_monthly <- myStocks_returns_monthly %>% 
+  mutate(year = year(date),
+         month=month(date),
+         month_name = month(date, label=TRUE)
+  )
+```
+
+
+Faceted scatterplot of VIX vs SPY
+
+
+```{r}
+by_year_monthly %>% 
+  group_by(year,symbol) %>% 
+  filter(year>=2018) %>% 
+  filter(symbol %in% c("^VIX", "SPY")) %>% 
+  pivot_wider(names_from = "symbol", 
+              values_from = "monthly_returns") %>% 
+  mutate(month_year = glue::glue("{month_name} '{year-2000}")) %>% 
+  ungroup() %>% 
+  ggplot(aes(x=`^VIX`, y = SPY, label=month_year, colour = factor(year)))+
+  geom_point()+
+  geom_text_repel(size=3)+
+  geom_smooth(method="lm", se=F)+
+  theme_bw()+
+  scale_x_continuous(labels = scales::percent) +
+  scale_y_continuous(labels = scales::percent) +
+  facet_wrap(~year, scales = "free"
+             )+
+  theme(legend.position = "none")+
+  labs(
+    title = "How do VIX changes impact returns of the SP500?",
+    subtitle = "Monthly returns, Jan 2018- Sep 2023",
+    x = "Change in VIX",
+    y = "Change in SPY" )+
+  NULL
+
+
+```

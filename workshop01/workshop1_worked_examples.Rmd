@@ -1,0 +1,413 @@
+---
+title: "Import, Inspect, Clean and Explore a Dataset"
+author: "Your name goes here"
+date: "`r Sys.Date()`"
+output:
+  html_document:
+    highlight: zenburn
+    theme: flatly
+    toc: yes
+    toc_float: yes
+  word_document:
+    toc: yes
+---
+
+
+
+```{r, setup}
+knitr::opts_chunk$set(
+  message = FALSE, 
+  warning = FALSE, 
+  tidy=FALSE,     # display code as typed
+  size="small")   # slightly smaller font for code
+options(digits = 3)
+
+# default figure size
+knitr::opts_chunk$set(
+  fig.width=6.75, 
+  fig.height=6.75,
+  fig.align = "center"
+)
+```
+
+
+```{r load-libraries,echo=FALSE}
+# load required libraries
+
+library(tidyverse)  # Load ggplot2, dplyr, and all the other tidyverse packages
+library(mosaic) 
+library(janitor) # clean_names()
+library(lubridate) # handling dates
+library(here)
+library(skimr)
+library(vroom)
+library(ggrepel) # to avoid loverlapping legends
+library(ggthemes) # theme_economist, theme_fivethirtyeight, etc
+library(knitr) 
+library(kableExtra) # for nicer table formatting
+library(zoo) # to calculate 7-day moving averages
+
+```
+
+# Task 1: London Bike Rentals and London weather
+
+The dataset we will be working with contains the number of daily bike rentals in London as well as some temperature data for each day in London. The data for daily bike rentals comes from [TfL]( https://data.london.gov.uk/download/number-bicycle-hires/ac29363e-e0cb-47cc-a97a-e216d900a6b0/tfl-daily-cycle-hires.xlsx) 
+
+
+## Import and inspect the datafile
+
+The first step is to import the data into R. We will use either `readr::read_csv()` or `vroom::vroom()`-- I prefer the latter as it is a lot faster. Once you import any datafile, make sure the first thing you do is  use `janitor::clean_names()`
+
+```{r bike-weather, echo = TRUE}
+bike_weather <- vroom(here::here("data","london_bikes.csv")) %>% 
+  mutate(month = lubridate::month(date, label = TRUE),
+         weekday = lubridate::wday(date, label=TRUE)
+  )
+```
+
+Having imported the datafame, we need to inspect it to see what kind of variables it contains, whether there are any missing values, etc. 
+
+```{r inspect_dataframe}
+
+skimr::skim(bike_weather)
+
+```
+
+
+
+## Aesthetic mappings 
+
+In this first task, we will discuss a core concept of ggplot, the mapping of data values onto aesthetics. We will be using the R package **tidyverse**, which includes `ggplot()` and other related functions.
+
+In the most basic use of ggplot, we call the `ggplot()` function with a dataset and an aesthetic mapping (created with `aes()`), and then we add a `geom`etry, such as `geom_line()` to draw lines or `geom_point()` to draw points.
+
+Try this for yourself. Map the column `day` onto the x axis and the column `temp` onto the y axis, and use `geom_line()` to display the data.
+
+
+```{r ggplot_geom_line}
+ggplot(bike_weather, aes(x = date, y = mean_temp)) +
+  geom_line()
+```
+Try again, using  `geom_point()` instead of `geom_line()`.
+
+
+```{r ggplot_geom_point}
+ggplot(bike_weather, aes(x = date, y = mean_temp)) +
+  geom_point()
+```
+
+And now swap which column you map to x and which to y.
+
+
+```{r ggplot_geom_point_flipped}
+ggplot(bike_weather, aes(x = mean_temp, y = date)) +
+  geom_point()
+```
+
+## Ploting distributions of `temp`
+
+You can use other geoms to make different types of plots. For example, `geom_histogram` will make a histogram and `geom_boxplot()` will make boxplots. 
+
+
+```{r ggplot_geom_histogram}
+ggplot(bike_weather, aes(x = mean_temp)) +
+  geom_histogram()
+```
+
+
+For boxplots, we frequently want categorical data on the x or y axis. For example, we might want a separate boxplot for each month. Try this out. Put `month` on the x axis, `temp` on the y axis, and use `geom_boxplot()`.
+
+
+
+```{r ggplot_geom_boxplot1}
+ggplot(bike_weather, aes(x = month, y = mean_temp)) +
+  geom_boxplot()
+```
+
+
+## Adding colour
+
+Make a scatter plot of `temp` against `day`, using the `colour` aesthetic to colour points by month. 
+
+```{r ggplot_geom_point_colour}
+ggplot(bike_weather, aes(x = date, y = mean_temp, colour=month)) +
+  geom_point()
+```
+
+## Using the `fill` aesthetic
+
+Some geoms use a `fill` aesthetic, which is similar to `colour` but applies to shaded areas, whereas the `colour` aesthetic applies to lines and points. For example, we can use the `fill` aesthetic with `geom_boxplot()` to colour the interior of the box. Try this yourself. Plot `month` on x, `temp` on y, and colour the interior of the box by the month.
+
+
+```{r ggplot_geom_boxplot2}
+ggplot(bike_weather, aes(x = month, y = mean_temp, fill=month)) +
+  geom_boxplot()
+```
+
+# Task 2: IMDB movies dataset
+
+
+```{r}
+movies <-read_csv(here::here("data","movies.csv")) %>% 
+    clean_names()
+
+skimr::skim(movies)
+```
+
+We have a look at the datafile, but let us say we wanted to explore whether investing money in a movie is a good investment. Let us have a generate two new variables, `profit` and `return_on_budget` and have a quick look.
+
+```{r}
+movies %>%
+  select(gross, budget) %>%
+  skimr::skim()
+
+# generate return on budget. Use mutate to create new variables
+movies <- movies %>%
+  mutate(profit = gross - budget,
+         return_on_budget = (profit/budget)*100)
+```
+
+The mean budget is about 40 million and the mean gross earnings is 58 million yielding a rough return of about 45% [(58/40) - 1)]. But this could be skewed from outliers, so let us consider the median, the 50th percentile, `p50`. When considering the medians, the return on budget is 73.5% 
+[(34.7/26) - 1)]
+
+### Drawing numerical values as bars
+
+For the `movies` dataset, we want to draw the `gross` amount (in USD) for each movie as a bar. Somewhat confusingly, the ggplot geometry that does this is called `geom_col()`. There is also a `geom_bar()`, but it works differently-- we'll get to that later. Make a bar plot of `gross` versus `title`. This means `gross` goes on the y axis and `title` on the x axis.
+
+```{r}
+ggplot(movies, aes(x = title, y = gross)) +
+  geom_col()
+```
+
+Now flip which column you map onto x and which onto y.
+
+```{r}
+ggplot(movies, aes(x = gross, y = title)) +
+  geom_col()
+```
+
+
+Now these is not very useful graphs, as we have close to 3000 movies. So let us simply choose the top 20 movies using `dplyr::slice_max()` and then using the pipe operator`%>%` , feed it into a ggplot.
+
+```{r}
+movies %>% 
+  slice_max(order_by = gross, n=20) %>% 
+  ggplot(aes(x = gross, y = title)) +
+  geom_col()
+```
+
+You can also change the theme to `theme_bw()` and add labels (title, subtitle, x-axis, y-axis)
+
+```{r}
+movies %>% 
+  slice_max(order_by = gross, n=20) %>% 
+  ggplot(aes(x = gross, y = title)) +
+  geom_col()+
+  theme_bw()+
+  labs(
+    title = "",
+    subtitle = "",
+    x = "Gross earnings (US$)",
+    y = NULL
+  )
+```
+
+
+### Getting bars into the right order
+
+Whenever we are making bar plots, we need to think about the correct order of the bars. By default, ggplot uses alphabetic ordering, but it is usually best to order by the magnitude of the values, i.e., sort the bars by length.
+
+We can do this with the `fct_reorder()` function, which takes two arguments: The categorical variable we want to re-order, and the values by which we want to order. Here, the categorical variable is the column `title` and the values are in the column `gross`. We can apply the `fct_reorder()` function right inside the `aes()` statement.
+
+
+```{r geom-col-sorted}
+movies %>% 
+  slice_max(order_by = gross, n=20) %>% 
+  ggplot(aes(x = gross, y = fct_reorder(title, gross))) +
+  geom_col() +
+  theme_bw()+
+  labs(
+    title = "",
+    subtitle = "",
+    x = "Gross earnings (US$)",
+    y = NULL
+  )+
+  NULL
+```
+
+- Can you make the bars blue?
+- Can you colour the bars by `gross` or by `title`?
+- Can you create a graph with the top/bottom 20 movies with respect to `return_on_budget`? Which were the greatest financial hits and the worst financial flops at the box office?
+
+## Reordering based on frequency
+
+Manual reordering is cumbersome if there are many levels that need to be reorderd. Therefore, we often use functions that can reorder automatically based on some quantitative criterion. For example, we can use `fct_infreq()` to order a factor based on the number of occurrences of each level in the dataset. And we can reverse the order of a factor using the function `fct_rev()`. These two functions are particularly useful for making bar plots.
+
+Consider the following plot of the number of movies in each genre. This plot is problematic because the genres are arranged in an arbitrary alphabetic order that is not meaningful for the data shown.
+
+```{r}
+movies %>% 
+  ggplot(aes(y = genre)) +
+  geom_bar()
+```
+
+Let us reorder the `count` column so that the genre with the most movies appears on top.
+
+```{r}
+movies %>% 
+  mutate(
+    genre = fct_infreq(genre)) %>%
+  ggplot(aes(y=genre))+
+  geom_bar()
+
+
+movies %>% 
+  mutate(
+    genre = fct_rev(fct_infreq(genre))) %>%
+  ggplot(aes(y=genre))+
+  geom_bar()
+
+```
+
+
+## Reordering based on numerical values
+
+Another common problem we encounter is that we want to order a factor based on some other numerical variable, possibly after we have calculated some summary statistic such as the median, minimum, or maximum. As an example for this problem, we will use `gapmider` and consider a plot of  life expectancy in various countries in Europe over time, shown as coloured tiles.
+
+```{r}
+gapminder %>%
+  filter(continent == "Europe") %>%
+  mutate(
+    country = fct_reorder(country, lifeExp, median)
+  ) %>%
+  ggplot(aes(year, country, fill = lifeExp)) +
+  geom_tile() +
+  scale_fill_viridis_c(option = "C")
+```
+
+Now, instead of plotting this data as coloured tiles, plot it as lines, using facets to make separate panels for each country.
+
+```{r}
+gapminder %>%
+  filter(continent == "Europe") %>%
+  mutate(country = fct_reorder(country, lifeExp, median)) %>%
+  ggplot(aes(year, lifeExp)) + 
+  geom_line() +
+  facet_wrap(vars(country))
+```
+
+
+
+# Task 3: NHANES (National Health and Nutrition Examination Survey)
+
+We will look at data from NHANES, the [National Health and Nutrition Examination Survey](https://wwwn.cdc.gov/nchs/nhanes/Default.aspx)
+
+### Data Dictionary
+
+From the [data dictionary](http://faculty.washington.edu/kenrice/heartgraphs/):
+
+* `BPXSAR`: systolic blood pressure (mmHg)
+* `BPXDAR`: diastolic blood pressure (mmHg)
+* `BPXDI1`, `BPXDI2`: two diastolic blood pressure readings
+* `race_ethc`: race/ethnicity, coded as:
+    - Hispanic, 
+    - White non-Hispanic, 
+    - Black non-Hispanic and 
+    - Other
+* `gender`: sex, coded as Male/Female
+* `DR1TFOLA`: folate intake (μg/day)
+* `RIAGENDR`: sex, coded as 1/2
+* `BMXBMI`: body mass index (kg/m2)
+* `RIDAGEY`: age (years)
+
+## Load the data set 
+
+```{r}
+my_heart <-read_csv(here::here("data","nhaneslarge.csv")) %>% 
+    clean_names() %>% 
+  rename(
+    bmi = bmxbmi,
+    systolic_pressure = bpxsar,
+    diastolic_pressure = bpxdar,
+    folate_intake = dr1tfola,
+    age = ridageyr
+  ) %>% 
+  select(
+    -c(bpxdi1,
+       bpxdi2,
+       riagendr
+       )
+  )
+
+
+
+```
+
+## Inspect the data set
+
+
+### 1. How many rows and columns are in the `heart` data? what are the variable types? Are there are any variables which are the wrong type?
+
+```{r, rows_and_columns}
+# write your code
+skim(my_heart)
+```
+
+
+
+
+### 2. Use `dplyr` to answer these questions:
+  - What is the minimum age in years?
+  - What is the maximum age in years?
+
+```{r, mimn_max_age}
+
+```
+
+### 3. Use `dplyr` to do the following:
+  - Make a new variable in `my_heart` called `age_months` that converts `age` to months.
+  - For individuals 280 months or older, what is the range of BMI values?
+    
+```{r}
+
+```
+
+
+### 4. Use `ggplot2` to make a scatterplot with age in years on the x-axis and BMI on the y-axis. Colour the points by `gender`, add a best fit line using `geom_smooth()`, and add appropriate labels.
+
+```{r}
+
+```
+
+### 5. Use `dplyr` and `ggplot2` to do the following:
+
+  - Type `?case_when` to read the help documents for this `dplyr` function. Use this function to make a new variable called `age_cat` with 3 values:
+      - `between(<name_of_age_var>, 0, 30)` is `age_cat == "Under 30"`
+      - `between(<name_of_age_var>, 31, 55)` is `age_cat == "31-55"`
+      - all other ages are `age_cat == "56+"`
+      
+You may find the attached graphic by Allison Horst useful      
+```{r case_when_graphic, echo=FALSE, out.width="100%"}
+knitr::include_graphics(here::here("images", "case_when_allison_horst.jpg"), error = FALSE)
+```
+
+```{r}
+my_heart <- my_heart %>% 
+  mutate(
+    age_cat = case_when(
+      age <= 30 ~ "Under 30",
+      age <= 55 ~ "31-55",
+      TRUE ~ "56+"
+    )
+  )
+```
+      
+      
+  - Create a scatter plot with bmi on the x-axis and blood pressure on the y-axis, facetting by your new `age_cat` variable. Colour the points by `gender`.
+  - Look up `?facet_grid`, and recreate the same plot now using `gender ~ age_cat`.
+  - make sure the age ranges are in the correct order as, by default, R will sort the age categories alphabetically.
+  - use proper labelling (title, axes, caption, etc). and try `theme_bw()`
+  
+```{r, case_when}
+
+```
