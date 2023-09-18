@@ -316,7 +316,7 @@ myStocks_returns_monthly %>%
   ) %>% 
   select(-date) %>% 
   
-  ggpairs(alpha) + 
+  ggpairs() + 
   theme_bw()
 
 
