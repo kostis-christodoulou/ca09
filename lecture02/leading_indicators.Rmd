@@ -1,0 +1,148 @@
+---
+title: EDA on Stock returns
+author: Kostis Christodoulou
+date: "`r Sys.Date()`"
+output:
+  html_document:
+    theme: journal
+    highlight: monochrome
+    toc: yes
+    toc_float: yes
+    number_sections: true
+  word_document:
+    toc: yes
+---
+  
+  
+  
+  
+```{r, setup, echo=FALSE}
+knitr::opts_chunk$set(
+  message = FALSE, 
+  warning = FALSE, 
+  tidy=FALSE,     # display code as typed
+  size="small")   # slightly smaller font for code
+options(digits = 3)
+
+# default figure size
+knitr::opts_chunk$set(
+  fig.width=6.75, 
+  fig.height=6.75,
+  fig.align = "center"
+)
+```
+
+
+```{r load-libraries, warning=FALSE, message=FALSE, echo=FALSE}
+library(tidyverse)  # Load ggplot2, dplyr, and all the other tidyverse packages
+library(lubridate)
+library(here)
+library(skimr)
+library(janitor)
+library(vroom)
+library(tidyquant)
+library(rvest)    # scrape websites
+library(purrr)  
+library(lubridate) #to handle dates
+library(ggrepel)
+library(GGally)
+```
+
+
+# Leading indicators of DJIA
+
+The DJIA is a lagging indicator that reflects investor confidence and may be an indicator of the health of the overall economy. Leading indicators, on the other hand, are measurable sets of data that might help anticipate trends and forecast future economic activity.
+
+The DJTA (Transportation Average) is closely watched to confirm the state of the U.S. economy, especially by proponents of Dow Theory who claim that the transportation sector acts as a leading indicator because it is further up the value chain involved in the procurement of goods for production compared to the more final products being sold by companies in the Dow Jones Industrial Average (DJIA), and thus the DJTA may be used to anticipate trends and forecast future economic activity.
+
+
+We will download data from yahoo finance on DJIA and DJTA.
+
+
+```{r get_price_data, message=FALSE, warning=FALSE, cache=TRUE}
+# Notice the cache=TRUE argument in the chunk options. Because getting data is time consuming, 
+# cache=TRUE means that once it downloads data, the chunk will not run again next time you knit your Rmd
+
+
+tickers <- c("^DJI", "^DJT")
+
+myStocks <- tickers %>% 
+  tq_get(get  = "stock.prices",
+         from = "2000-01-01",
+         to = Sys.Date()) %>% # today's date
+  group_by(symbol) 
+
+glimpse(myStocks) # examine the structure of the resulting data frame
+
+
+#calculate monthly  returns
+myStocks_returns_monthly <- myStocks %>%
+  tq_transmute(select     = adjusted, 
+               mutate_fun = periodReturn, 
+               period     = "monthly", 
+               type       = "arithmetic",
+               col_rename = "monthly_returns",
+               cols = c(nested.col)) 
+
+```
+
+# Correlation-Scatterplot matrix of monthly returns for DJI, DJT and lags of DJT
+
+```{r}
+
+
+wide_returns <- myStocks_returns_monthly %>% 
+
+  # table must be in wide format--  each column should be the returns of a stock
+  pivot_wider(
+    names_from = symbol,
+    values_from = monthly_returns
+  ) %>% 
+  
+  # give better names with no special characters
+  rename(dji = `^DJI`,
+         djt = `^DJT`) %>% 
+  
+  # create lags of 1, 2, 3 months 
+  mutate(lag_djt_1 = lag(djt,1),
+         lag_djt_2 = lag(djt,2),
+         lag_djt_3 = lag(djt,3),
+         ) %>% 
+  
+  drop_na()
+  
+
+wide_returns %>% 
+  select(-date) %>% 
+  ggpairs() + 
+  theme_bw()
+
+
+```
+
+# Data from FRED
+
+A lot of economic data can be downloaded from the Federal Reserve Economic Data (FRED) Database
+https://fred.stlouisfed.org/categories
+
+```{r, copper_and_housing}
+
+symbols <- c("PCOPPUSDM", "HOUST")
+
+indicators  <-   symbols %>% 
+  tq_get(get = "economic.data",
+         from = "1990-01-01")
+
+ggplot(indicators, aes(x=date, y=price, colour = symbol)) +
+  geom_line()+
+  theme_bw()+
+  labs(x=NULL, y = NULL)+
+  facet_wrap(~symbol,
+             scales = "free",
+             ncol=1)+
+  theme(legend.position ="none")
+NULL
+
+```
+
+
